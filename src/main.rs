@@ -1,13 +1,13 @@
 use eprompt::*;
 
 fn main() -> Result<()> {
-    //let x = multi_select("Select multiple options", &[1, 2, 3])?;
-    //println!("Chosen: {:?}", x);
+    let x = multi_select("What would you like to do today?", &["Eat a cake", "Go to work", "Go on a hike"])?;
+    println!("Lets do it! {:?}", x);
 
-    //let x = select("Select an option", &[4, 5, 6])?;
-    //println!("Chosen: {:?}", x);
+    let x = select("How much fun is this library out of 5?", &[1, 2, 3, 4, 5])?;
+    println!("Excelent: {:?}", x);
 
     let x: i32 = input("Enter your age")?;
-    println!("Your age is: {}", x);
+    println!("Wow you're already {}!", x);
     Ok(())
 }
