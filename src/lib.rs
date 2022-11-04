@@ -10,6 +10,11 @@ use crossterm::{
 };
 
 
+/// Prompts the user for input and parses it to the specified type.
+/// ```no_run
+/// use eprompt::*;
+/// let x: i32 = input("How old are you? ").unwrap();
+/// ```
 pub fn input<T: std::str::FromStr>(prompt: &str) -> Result<T> {
     let stdin = stdin();
     let mut stdout = stdout();
@@ -26,6 +31,13 @@ pub fn input<T: std::str::FromStr>(prompt: &str) -> Result<T> {
     }
 }
 
+
+/// Offers the user a multiple selections to choose and returns a list of the chosed values.
+/// this is basically a checkbox select.
+/// ```no_run
+/// use eprompt::*;
+/// let chosen: Vec<&i32> = multi_select("Choose an option:", &[1, 2, 3]).unwrap();
+/// ```
 pub fn multi_select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<Vec<&'a T>> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();
@@ -74,6 +86,12 @@ pub fn multi_select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Re
     }
 }
 
+/// Offers the user a multiple options and the user may select one.
+/// this is basically a radio select.
+/// ```no_run
+/// use eprompt::*;
+/// let chosen: &i32 = select("Choose an option:", &[1, 2, 3]).unwrap();
+/// ```
 pub fn select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<&'a T> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();
