@@ -1,6 +1,6 @@
 [package]
 name = "eprompt"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Easy to use interactive prompt library. No complex structs or traits, just a few simple to use functions."
 license-file = "LICENSE"

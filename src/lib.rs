@@ -1,14 +1,13 @@
-use std::io::{stdout, stdin, Write, BufRead};
 pub use crossterm::Result;
+use std::io::{stdin, stdout, BufRead, Write};
 
 use crossterm::{
-    execute,
-    event::{ Event, KeyCode },
+    cursor, event,
+    event::{Event, KeyCode},
+    execute, queue,
+    style::*,
     terminal,
-    cursor,
-    event,
 };
-
 
 /// Prompts the user for input and parses it to the specified type.
 /// ```no_run
@@ -21,16 +20,22 @@ pub fn input<T: std::str::FromStr>(prompt: &str) -> Result<T> {
     let mut buffer = String::new();
     loop {
         print!("{}: ", prompt);
+        queue!(stdout, SetForegroundColor(Color::Magenta))?;
         stdout.flush()?;
         buffer.clear();
         stdin.lock().read_line(&mut buffer)?;
         if let Ok(x) = buffer.trim().parse() {
+            execute!(stdout, ResetColor)?;
             return Ok(x);
         }
-        execute!(stdout, cursor::MoveUp(1), terminal::Clear(terminal::ClearType::CurrentLine))?;
+        queue!(
+            stdout,
+            cursor::MoveUp(1),
+            terminal::Clear(terminal::ClearType::CurrentLine),
+            ResetColor,
+        )?;
     }
 }
-
 
 /// Offers the user a multiple selections to choose and returns a list of the chosed values.
 /// this is basically a checkbox select.
@@ -38,51 +43,60 @@ pub fn input<T: std::str::FromStr>(prompt: &str) -> Result<T> {
 /// use eprompt::*;
 /// let chosen: Vec<&i32> = multi_select("Choose an option:", &[1, 2, 3]).unwrap();
 /// ```
-pub fn multi_select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<Vec<&'a T>> {
+pub fn multi_select<'a, T: std::fmt::Display>(message: &str, opts: &'a [T]) -> Result<Vec<&'a T>> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();
     let mut selected = vec![false; opts.len()];
     let mut current = 0;
 
-    write!(stdout, "{}\n\r", prompt)?;
+    queue!(stdout, Print(format!("{}\n\r", message)))?;
     loop {
         for i in 0..opts.len() {
+            queue!(stdout, Print('\t'))?;
+            if i == current {
+                queue!(
+                    stdout,
+                    SetAttribute(Attribute::Bold),
+                    SetAttribute(Attribute::Underlined),
+                    SetForegroundColor(Color::Magenta),
+                    Print('>'),
+                )?;
+            } else {
+                queue!(stdout, Print(' '))?;
+            }
+            queue!(stdout, Print(" ["))?;
             if selected[i] {
-                if i == current {
-                    write!(stdout, "\t> [x] {}\n\r", opts[i])?;
-                } else {
-                    write!(stdout, "\t  [x] {}\n\r", opts[i])?;
+                queue!(stdout, Print('x'))?;
+            } else {
+                queue!(stdout, Print(' '))?;
+            }
+            queue!(
+                stdout,
+                Print(format!("] {}\n\r", opts[i])),
+                SetAttribute(Attribute::Reset)
+            )?;
+        }
+        queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+        stdout.flush()?;
+
+        if let Event::Key(k) = event::read()? {
+            match k.code.into() {
+                SelectEvent::Up => current = current.saturating_sub(1),
+                SelectEvent::Down => current = (current + 1).min(opts.len() - 1),
+                SelectEvent::Select => selected[current] = !selected[current],
+                SelectEvent::Enter => {
+                    terminal::disable_raw_mode()?;
+                    return Ok(opts
+                        .iter()
+                        .enumerate()
+                        .filter(|o| selected[o.0])
+                        .map(|o| o.1)
+                        .collect());
                 }
-            } else  {
-                if i == current {
-                    write!(stdout, "\t> [ ] {}\n\r", opts[i])?;
-                } else {
-                    write!(stdout, "\t  [ ] {}\n\r", opts[i])?;
-                }
+                SelectEvent::Noop => (),
             }
         }
-        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
-
-        match event::read()? {
-            Event::Key(k) => {
-                match k.code.into() {
-                    SelectEvent::Up => current = current.saturating_sub(1),
-                    SelectEvent::Down => current = (current + 1).min(opts.len() - 1),
-                    SelectEvent::Select => selected[current] = !selected[current],
-                    SelectEvent::Enter => { 
-                        terminal::disable_raw_mode()?;
-                        return Ok(opts.into_iter().enumerate().filter_map(|( index, o )| {
-                            if selected[index] { Some(o) }
-                            else { None }
-                        }).collect());
-                    },
-                    SelectEvent::Noop => (),
-
-                }
-            },
-            _ => (),
-        }
-        execute!(stdout, cursor::MoveUp(opts.len() as u16))?;
+        queue!(stdout, cursor::MoveUp(opts.len() as u16))?;
     }
 }
 
@@ -98,33 +112,37 @@ pub fn select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<&
 
     let mut selected = 0;
 
-    write!(stdout, "{}\n\r", prompt)?;
+    queue!(stdout, Print(format!("{}\n\r", prompt)))?;
     loop {
-        for i in 0..opts.len() {
+        for (i, opt) in opts.iter().enumerate() {
             if i == selected {
-                write!(stdout, "\t> {}\n\r", opts[i])?;
+                queue!(
+                    stdout,
+                    SetAttribute(Attribute::Bold),
+                    SetAttribute(Attribute::Underlined),
+                    SetForegroundColor(Color::Magenta),
+                    Print(format!("\t> {}\n\r", opt)),
+                    SetAttribute(Attribute::Reset),
+                )?;
             } else {
-                write!(stdout, "\t  {}\n\r", opts[i])?;
+                queue!(stdout, Print(format!("\t  {}\n\r", opts[i])))?;
             }
         }
-        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+        queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+        stdout.flush()?;
 
-        match event::read()? {
-            Event::Key(k) => {
-                match k.code.into() {
-                    SelectEvent::Up => selected = selected.saturating_sub(1),
-                    SelectEvent::Down => selected = (selected + 1).min(opts.len() - 1),
-                    SelectEvent::Select | SelectEvent::Enter => { 
-                        terminal::disable_raw_mode()?;
-                        return Ok(&opts[selected]);
-                    },
-                    SelectEvent::Noop => (),
-
+        if let Event::Key(k) = event::read()? {
+            match k.code.into() {
+                SelectEvent::Up => selected = selected.saturating_sub(1),
+                SelectEvent::Down => selected = (selected + 1).min(opts.len() - 1),
+                SelectEvent::Select | SelectEvent::Enter => {
+                    terminal::disable_raw_mode()?;
+                    return Ok(&opts[selected]);
                 }
-            },
-            _ => (),
+                SelectEvent::Noop => (),
+            }
         }
-        execute!(stdout, cursor::MoveUp(opts.len() as u16))?;
+        queue!(stdout, cursor::MoveUp(opts.len() as u16))?;
     }
 }
 
@@ -140,7 +158,7 @@ impl From<KeyCode> for SelectEvent {
     fn from(value: KeyCode) -> Self {
         match value {
             KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('K') => SelectEvent::Up,
-            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('J') =>  SelectEvent::Down,
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('J') => SelectEvent::Down,
             KeyCode::Enter => SelectEvent::Enter,
             KeyCode::Char(' ') => SelectEvent::Select,
             _ => SelectEvent::Noop,
