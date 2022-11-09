@@ -1,5 +1,43 @@
-pub use crossterm::Result;
+//! Here is a cool example with enums!
+//!
+//!```no_run
+//! use eprompt::*;
+//! use std::fmt::Display;
+//! 
+//! #[derive(Debug)]
+//! enum Choices {
+//!     Opt1(i32),
+//!     Opt2(&'static str),
+//!     Opt3,
+//! }
+//! 
+//! impl Display for Choices {
+//!     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+//!         match *self {
+//!             Self::Opt1(x) => write!(fmt, "{} of Option 1", x),
+//!             Self::Opt2(x) => write!(fmt, "Option 2 is {}", x),
+//!             Self::Opt3 => write!(fmt, "Mystery option 3"),
+//!         }
+//!     }
+//! }
+//! 
+//! fn main() -> Result<(), std::io::Error> {
+//!     for choice in multi_select("Make a selection", 
+//!         &[Choices::Opt1(69), Choices::Opt2("A Brand new pony"), Choices::Opt3]
+//!     )?.map(|x| x.1) {
+//!         match choice {
+//!             Choices::Opt1(x) => todo!("Do something with option 1"),
+//!             Choices::Opt2(x) => todo!("Do something with option 2"),
+//!             Choices::Opt3 => todo!("Do something with option 3"),
+//!         }
+//!     }
+//!     
+//!     Ok(())
+//! }
+//! ```
+use crossterm::Result;
 use std::io::{stdin, stdout, BufRead, Write};
+use std::str::FromStr;
 
 use crossterm::{
     cursor, event,
@@ -14,7 +52,7 @@ use crossterm::{
 /// use eprompt::*;
 /// let x: i32 = input("How old are you? ").unwrap();
 /// ```
-pub fn input<T: std::str::FromStr>(prompt: &str) -> Result<T> {
+pub fn input<T: FromStr>(prompt: &str) -> Result<T> {
     let stdin = stdin();
     let mut stdout = stdout();
     let mut buffer = String::new();
@@ -37,13 +75,14 @@ pub fn input<T: std::str::FromStr>(prompt: &str) -> Result<T> {
     }
 }
 
-/// Offers the user a multiple selections to choose and returns a list of the chosed values.
-/// this is basically a checkbox select.
+/// Prompt the user with various options and return an interator over selected indicies, and references to the
+/// chosen options.
 /// ```no_run
 /// use eprompt::*;
-/// let chosen: Vec<&i32> = multi_select("Choose an option:", &[1, 2, 3]).unwrap();
+/// let chosen: Vec<usize> = multi_select("Choose an option:", &["User chooses 1", "Not Chosen", "Chosen"]).unwrap().map(|x| x.0).collect();
+/// assert_eq!(chosen, vec![0, 1]);
 /// ```
-pub fn multi_select<'a, T: std::fmt::Display>(message: &str, opts: &'a [T]) -> Result<Vec<&'a T>> {
+pub fn multi_select<'a, T: std::fmt::Display>(message: &str, opts: &'a [T]) -> Result<impl Iterator<Item=(usize, &'a T)>> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();
     let mut selected = vec![false; opts.len()];
@@ -89,9 +128,8 @@ pub fn multi_select<'a, T: std::fmt::Display>(message: &str, opts: &'a [T]) -> R
                     return Ok(opts
                         .iter()
                         .enumerate()
-                        .filter(|o| selected[o.0])
-                        .map(|o| o.1)
-                        .collect());
+                        .filter(move |o| selected[o.0])
+                    );
                 }
                 SelectEvent::Noop => (),
             }
@@ -100,13 +138,13 @@ pub fn multi_select<'a, T: std::fmt::Display>(message: &str, opts: &'a [T]) -> R
     }
 }
 
-/// Offers the user a multiple options and the user may select one.
-/// this is basically a radio select.
+/// Gets single user choice from `opts` and returns the selected index and reference to the
+/// selected option
 /// ```no_run
 /// use eprompt::*;
-/// let chosen: &i32 = select("Choose an option:", &[1, 2, 3]).unwrap();
+/// let chosen: (usize, &i32) = select("Choose an option:", &[1, 2, 3]).unwrap();
 /// ```
-pub fn select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<&'a T> {
+pub fn select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<(usize, &'a T)> {
     terminal::enable_raw_mode()?;
     let mut stdout = stdout();
 
@@ -137,7 +175,7 @@ pub fn select<'a, T: std::fmt::Display>(prompt: &str, opts: &'a [T]) -> Result<&
                 SelectEvent::Down => selected = (selected + 1).min(opts.len() - 1),
                 SelectEvent::Select | SelectEvent::Enter => {
                     terminal::disable_raw_mode()?;
-                    return Ok(&opts[selected]);
+                    return Ok((selected, &opts[selected]));
                 }
                 SelectEvent::Noop => (),
             }
