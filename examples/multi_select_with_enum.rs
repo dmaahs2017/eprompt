@@ -21,8 +21,14 @@ impl Display for Choices {
 fn main() -> Result<(), std::io::Error> {
     let x = multi_select(
         "Make a selection",
-        &[Choices::Opt1(69), Choices::Opt2("A Brand new pony"), Choices::Opt3],
-    )?.map(|x| x.1).collect::<Vec<_>>();
+        &[
+            Choices::Opt1(69),
+            Choices::Opt2("A Brand new pony"),
+            Choices::Opt3,
+        ],
+    )?
+    .map(|x| x.1)
+    .collect::<Vec<_>>();
     println!("Lets do it! {:?}", x);
 
     let x = select("How much fun is this library out of 5?", &[1, 2, 3, 4, 5])?.1;
